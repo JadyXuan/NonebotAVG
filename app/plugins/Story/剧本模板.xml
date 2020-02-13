@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?><!--这里是xml文件头，不可以乱改，该条为注释，可删除-->
+<unfold> <!--故事剧本的根节点，一切的开头-->
+	<class name="INTERDUCTION"> <!--故事启动时触发的引言介绍-->
+		<content>故事开头引言内容，可为空</content>
+		<method></method>   <!--故事开头执行内容，可为空。method目前支持的函数有flag_on(flag),flag_off(flag),send(msg),delay(time),end_chapter().所有函数结尾都需要加分号-->
+	</class>
+	<class name="EVENTS"><!--故事主体事件部分，其中每一个事件称为response-->
+		<response>
+			<chapter_number>1</chapter_number>    <!--章节序号，限定为数字，指定该事件所在的章节，可为空-->
+			<key>关键词</key>     <!--事件关键词，匹配玩家发送的信息，不可为空-->
+			<content>事件内容，可为空</content>     <!--事件内容，匹配到该事件时发送给玩家的信息，可为空-->
+			<flag></flag>       <!--事件标签，旗子，随便怎么称呼都行，用于限定玩家匹配到该事件的条件-->
+			<method></method>      <!--匹配到该事件时执行的函数，可为空-->
+		</response>
+		<response>
+			<chapter_number>1</chapter_number>
+			<key>关键词，不可为空</key>
+			<content>事件内容，可为空</content>
+			<flag></flag>
+			<method></method>
+		</response>
+	</class>
+	<class name="DEFAULT">!--默认回复用于未匹配到事件时的默认回复，可以不设置，同理，chapter_number与flag来判定该回复是否生效-->
+		<response>
+			<chapter_number>1</chapter_number>
+			<flag></flag>
+			<content>你没有找到关键词哦~再重新思考一下试试？</content>
+			<method></method>
+		</response>
+	</class>
+
+</unfold>
