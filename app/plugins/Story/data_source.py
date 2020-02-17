@@ -4,39 +4,64 @@ import configparser
 import xml.dom.minidom as xml
 import time
 from os import path
+
+
 class StoryProcess:
     def __init__(self, player, story_id):
-        self.player = player
-        self.flag_list = []
-        self.property = {}
-        self.process = 0
+        self.isReady = False  # 故事载入情况
+        self.error_code = 0  # 故事错误码
+
+        self.unfold = False  # 故事开幕情况
+
+        self.player = player  # player身份
+        self.flag_list = []  # flag列表
+        self.property = {}  # 财产列表
+        self.process = 0   # 章节进度
+        self.isDelay = 0   # delay设置
 
 
         conf = configparser.ConfigParser()
         conf.read(path.join(path.dirname(__file__), 'story_id.ini'), encoding="utf-8-sig")
         #secs = conf.sections()
         #print(secs)
-        self.story_path = conf.get("StoryDatabase",story_id)
-        print(self.story_path)
-        self.dom = xml.parse(self.story_path)
+        try:
+            self.story_path = conf.get("StoryDatabase", story_id)
+            print(self.story_path)
+            self.dom = xml.parse(self.story_path)
+
+            # 导入故事完成后从故事导入设定 #
+            self.get_setting()
+            self.isReady = True  # 指示当前story已经准备完毕
+        except:
+            print("故事名错误，载入故事失败")
+            self.isReady = False
+            self.error_code = 201  # error_code:2xx 表示故事载入错误系列，201表示故事名不存在 （1xx表示用户身份验证错误系列）
+
 
     async def action(self, session):
         message = session.current_arg_text
-        if session.is_first_run: #第一次响应时,标题开启
+        if not self.unfold: #第一次响应时,标题开启
             content, method = self.get_interduction()
             print(content)
             print(method)
             await session.send(content)
             await self.charge_method(session, method)
             self.end_chapter() #开启章节
+            self.unfold = True
         else:  #匹配用户反应操作
             content, method = self.get_response(message) #匹配response
             if content: #匹配成功
+                #####插入设置的发送延时#####
+                if self.isDelay > 0:
+                    time.sleep(self.isDelay)
                 await session.send(content) #发送content的内容
                 await self.charge_method(session, method) #执行method的内容
                 print(content)
             else:
                 content, method = self.get_default_response()
+                #####插入设置的发送延时#####
+                if self.isDelay > 0:
+                    time.sleep(self.isDelay)
                 await session.send(content)
                 await self.charge_method(session, method)  # 执行method的内容
 
@@ -78,10 +103,10 @@ class StoryProcess:
         if "," in property_list:
             property_list = property_list.split(",")
             for property in property_list:
-                property = property_pair.strip()
+                property = property.strip()
                 if property in self.property:
                     self.property.pop(property)
-                    print("delete "+property+":"+num+" successfully.")
+                    print("delete "+property+" successfully.")
                 else:
                     print("property " + property + " doesn't exis.")
         else:
@@ -148,6 +173,7 @@ class StoryProcess:
                 name, arg = method.split("(") #分开函数名与参数
                 arg = arg[:-1] #去掉最后一个括号
                 print(name+" "+arg)
+
                 if name in class_noarg_method_dic: #不含参函数执行
                     act = class_noarg_method_dic[name]
                     act()
@@ -159,6 +185,9 @@ class StoryProcess:
                     act = class_method_dic[name]
                     act(arg)
                 elif name in session_method_dic: #需要await的会话函数另外执行
+                    #####插入设置的延时#####
+                    if self.isDelay > 0:
+                        time.sleep(self.isDelay)
                     act = session_method_dic[name]
                     await act(arg)
 
@@ -257,7 +286,7 @@ class StoryProcess:
         for response in responses:
             isChapter = 0
             chapter_number_node = response.getElementsByTagName("chapter_number")[0]
-            if chapter_number_node.childNodes == []:  #如果没有要求chapter  （？还在考虑是否要求必须填写chapter）
+            if chapter_number_node.childNodes == []:  # 如果没有要求chapter  （？还在考虑是否要求必须填写chapter）
                 isChapter = 1
             else:
                 chapter_numbers = chapter_number_node.childNodes[0].data
@@ -298,3 +327,8 @@ class StoryProcess:
 
                     return content, method
         return "", ""
+
+    def get_setting(self):
+        root = self.dom.documentElement
+        setting_class = root.getElementsByTagName("class")[3]  # 获取setting
+        self.isDelay = float(setting_class.getElementsByTagName("isDelay")[0].childNodes[0].data)  # isDelay的setting

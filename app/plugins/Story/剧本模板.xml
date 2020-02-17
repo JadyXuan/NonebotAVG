@@ -20,13 +20,16 @@
 			<method></method>
 		</response>
 	</class>
-	<class name="DEFAULT">!--默认回复用于未匹配到事件时的默认回复，可以不设置，同理，chapter_number与flag来判定该回复是否生效-->
+	<class name="DEFAULT"><!--默认回复用于未匹配到事件时的默认回复，可以不设置，同理，chapter_number与flag来判定该回复是否生效-->
 		<response>
 			<chapter_number>1</chapter_number>
 			<flag></flag>
 			<content>你没有找到关键词哦~再重新思考一下试试？</content>
 			<method></method>
 		</response>
+	</class>
+	<class name="SETTING"><!--SETTING设置一些故事全局设置，里面每一项必须存在，不得删减-->
+		<isDelay>0</isDelay><!--发送对话之间的默认间隔-->
 	</class>
 
 </unfold>
