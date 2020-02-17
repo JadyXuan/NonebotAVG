@@ -9,7 +9,10 @@ import os
 
 @on_command('活动', permission=permission.PRIVATE)
 async def activity(session: CommandSession):
-    if not session.state['isLoad']:  # 如果还未载入故事
+    if session.current_arg_text == '退出':  # 退出后要做的动作
+        bot = session.bot
+        await bot.send_group_msg(group_id=1020570636, message="测试样例")
+    elif not session.state['isLoad']:  # 如果还未载入故事
         story_name = session.get('story_name', prompt='请输入要进入的故事')  # 尝试向用户获取故事名，若没有获取到，则发送prompt中的消息
         Story = StoryProcess("admin", story_name)  # 第一个参数为玩家身份，第二个参数为剧本名称
         if Story.isReady:
@@ -18,16 +21,13 @@ async def activity(session: CommandSession):
             print("故事载入成功")
         else:
             if Story.error_code == 201:  #错误码201表示故事名错误（2xx为故事载入错误，1xx预留给玩家验证错误
-                await session.send("故事名不存在，活动退出")
-            return
+                session.pause("故事名不存在，请重新输入")
+
     if session.current_arg_text != '退出' and session.state['isLoad']:
         Story = session.state['Story']
         await Story.action(session)
         session.state['Story'] = Story
         session.pause()
-    elif session.current_arg_text == '退出':  # 退出后要做的动作
-        bot = session.bot
-        await bot.send_group_msg(group_id=1020570636, message="测试样例")
     await session.send("")  # 活动结束操作
 
 # activity.args_parser 装饰器将函数声明为 活动命令的参数解析器

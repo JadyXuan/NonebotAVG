@@ -170,7 +170,7 @@ class StoryProcess:
             message = message[:-1] #去掉最后一个分号
             methods = message.split(";")
             for method in methods:
-                name, arg = method.split("(") #分开函数名与参数
+                name, arg = method.strip().split("(", 1) #分开函数名与参数
                 arg = arg[:-1] #去掉最后一个括号
                 print(name+" "+arg)
 
