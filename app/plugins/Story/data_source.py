@@ -18,25 +18,31 @@ class StoryProcess:
         self.property = {}  # 财产列表
         self.process = 0   # 章节进度
         self.isDelay = 0   # delay设置
-
+        self.capitalization_sensitive = 0  # 大小写敏感设置
 
         conf = configparser.ConfigParser()
         conf.read(path.join(path.dirname(__file__), 'story_id.ini'), encoding="utf-8-sig")
-        #secs = conf.sections()
-        #print(secs)
+        # secs = conf.sections()
+        # print(secs)
         try:
             self.story_path = conf.get("StoryDatabase", story_id)
             print(self.story_path)
-            self.dom = xml.parse(self.story_path)
 
-            # 导入故事完成后从故事导入设定 #
-            self.get_setting()
-            self.isReady = True  # 指示当前story已经准备完毕
-        except:
+        except Exception:
             print("故事名错误，载入故事失败")
             self.isReady = False
             self.error_code = 201  # error_code:2xx 表示故事载入错误系列，201表示故事名不存在 （1xx表示用户身份验证错误系列）
-
+        else:
+            try:
+                self.dom = xml.parse(self.story_path)
+            except Exception as e:
+                print('Error:', e)
+                self.isReady = False
+                self.error_code = 202  # 故事文件载入错误，请联系管理员
+            else:
+                # 导入故事完成后从故事导入设定 #
+                self.get_setting()
+                self.isReady = True  # 指示当前story已经准备完毕
 
     async def action(self, session):
         message = session.current_arg_text
@@ -50,7 +56,7 @@ class StoryProcess:
             self.unfold = True
         else:  #匹配用户反应操作
             content, method = self.get_response(message) #匹配response
-            if content: #匹配成功
+            if content != None: #匹配成功
                 #####插入设置的发送延时#####
                 if self.isDelay > 0:
                     time.sleep(self.isDelay)
@@ -167,13 +173,11 @@ class StoryProcess:
                             } #类内含参数方法
         session_method_dic = {"send": session.send}
         if message != "":
-            message = message[:-1] #去掉最后一个分号
-            methods = message.split(";")
+            message = message[:-2] #去掉最后一个分号
+            methods = message.split(");")
             for method in methods:
                 name, arg = method.strip().split("(", 1) #分开函数名与参数
-                arg = arg[:-1] #去掉最后一个括号
                 print(name+" "+arg)
-
                 if name in class_noarg_method_dic: #不含参函数执行
                     act = class_noarg_method_dic[name]
                     act()
@@ -189,6 +193,7 @@ class StoryProcess:
                     if self.isDelay > 0:
                         time.sleep(self.isDelay)
                     act = session_method_dic[name]
+                    arg = self.format_charge(arg)
                     await act(arg)
 
     ############################xml匹配获取函数#################################
@@ -214,15 +219,27 @@ class StoryProcess:
                 key_node = response.getElementsByTagName("key")[0]
                 keys = key_node.childNodes[0].data
                 iskey = 0
-                key_modules = keys.split("or")
+                key_modules = keys.split(" or ")
                 for key_block in key_modules:  # 分割为或为单位的key组
-                    key_block = key_block.split("and")  # 分割为与为单位的key块
+                    key_block = key_block.split(" and ")  # 分割为与为单位的key块
                     iskey_block = 1
                     for key in key_block:
                         key = key.strip()
-                        # print(flag)
-                        if key not in message:
-                            iskey_block = 0
+                        not_key = 0
+                        if "not " in key:  # 解析not key 关键字
+                            not_key = 1
+                        if not self.capitalization_sensitive:
+                            key = key.lower()
+                            message = message.lower()
+                        if re.findall(r"[(](.*)[)]", key):
+                            key = re.findall(r"[(](.*)[)]", key)[0]
+                            if key not in message and not_key == 0:
+                                iskey_block = 0
+                            elif key in message and not_key == 1:
+                                iskey_block = 0
+                        else:
+                            if key != message and not_key == 0:
+                                iskey_block = 0
                     if iskey_block == 1:
                         iskey += 1
                 if iskey:
@@ -251,6 +268,7 @@ class StoryProcess:
                             content = ""
                         else:
                             content = content_node.childNodes[0].data
+                            content = self.format_charge(content)
 
                         method_node = response.getElementsByTagName("method")[0]
                         if method_node.childNodes == []:
@@ -270,6 +288,7 @@ class StoryProcess:
             content = ""
         else:
             content = content_node.childNodes[0].data
+            content = self.format_charge(content)
         method_node = story_class.getElementsByTagName("method")[0]
         if method_node.childNodes == []:
             method = ""
@@ -318,6 +337,7 @@ class StoryProcess:
                         content = ""
                     else:
                         content = content_node.childNodes[0].data
+                        content = self.format_charge(content)
 
                     method_node = response.getElementsByTagName("method")[0]
                     if method_node.childNodes == []:
@@ -332,3 +352,29 @@ class StoryProcess:
         root = self.dom.documentElement
         setting_class = root.getElementsByTagName("class")[3]  # 获取setting
         self.isDelay = float(setting_class.getElementsByTagName("isDelay")[0].childNodes[0].data)  # isDelay的setting
+        self.capitalization_sensitive = float(setting_class.getElementsByTagName("capitalization_sensitive")[0].childNodes[0].data)
+
+
+
+
+    def format_charge(self, content):
+        return_content = ""
+        contents = content.split("%%")  # 将原先的%号位置记录下来
+        for i in contents:  # 每个i后都需要跟一个原先的%
+            variables = re.findall(r"%(.+?)\s", i, re.S)
+            units = re.split(r"%.+?\s", i, re.S)
+            print(units)
+            k = ""
+            for num in range(len(variables)):
+                if variables[num] in self.property:
+                    variable = str(self.property[variables[num]])
+                else:
+                    print("error: no such property name:" + variables[num])
+                    variable = ""
+                k += units[num] + variable
+            k += units[len(variables)]
+            return_content += k + "%"
+
+        return return_content[:-1]
+
+

@@ -21,7 +21,14 @@ async def activity(session: CommandSession):
             print("故事载入成功")
         else:
             if Story.error_code == 201:  #错误码201表示故事名错误（2xx为故事载入错误，1xx预留给玩家验证错误
-                session.pause("故事名不存在，请重新输入")
+                del Story
+                del session.state['story_name']
+                session.pause("故事名"+story_name+"不存在，请重新输入")
+            if Story.error_code == 202:  #错误码202 故事文件载入错误
+                del Story
+                del session.state['story_name']
+                session.pause("故事 "+story_name+" 文件载入错误，请联系管理员")
+
 
     if session.current_arg_text != '退出' and session.state['isLoad']:
         Story = session.state['Story']

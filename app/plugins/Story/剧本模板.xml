@@ -30,6 +30,7 @@
 	</class>
 	<class name="SETTING"><!--SETTING设置一些故事全局设置，里面每一项必须存在，不得删减-->
 		<isDelay>0</isDelay><!--发送对话之间的默认间隔-->
+		<capitalization_sensitive>0</capitalization_sensitive><!--大小写敏感-->
 	</class>
 
 </unfold>
