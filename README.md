@@ -5,7 +5,7 @@
 
 app/plugins/Story文件夹下的data_source.py文件为剧本导入与事件处理插件
 
-__init__.py是普通的Nonebot插件文件。data_source定义了Story类作为游戏进度类，在init当中初始化Story类后使用Story.action(msg)来传入用户会话。
+\__init__\.py是普通的Nonebot插件文件。data_source定义了Story类作为游戏进度类，在init当中初始化Story类后使用Story.action(msg)来传入用户会话。
 
 目前仅支持nonebot框架（因为用过的qq机器人框架就两个xwx）
 
