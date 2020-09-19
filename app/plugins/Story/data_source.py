@@ -1,8 +1,10 @@
 import os
+import copy
 import re
 import configparser
 import xml.dom.minidom as xml
 import time
+import random
 from os import path
 
 
@@ -19,13 +21,20 @@ class StoryProcess:
         self.process = 0   # 章节进度
         self.isDelay = 0   # delay设置
         self.capitalization_sensitive = 0  # 大小写敏感设置
+        self.isBack = 0  #是否允许后退设置
+
+
+        self.debug = False  #调试模式是否开启
+
+        self.history = []  #历史记录列表
+
 
         conf = configparser.ConfigParser()
         conf.read(path.join(path.dirname(__file__), 'story_id.ini'), encoding="utf-8-sig")
         # secs = conf.sections()
         # print(secs)
         try:
-            self.story_path = conf.get("StoryDatabase", story_id)
+            self.story_path = os.path.dirname(os.path.realpath(__file__)) +'\\'+ conf.get("StoryDatabase", story_id)
             print(self.story_path)
 
         except Exception:
@@ -34,7 +43,7 @@ class StoryProcess:
             self.error_code = 201  # error_code:2xx 表示故事载入错误系列，201表示故事名不存在 （1xx表示用户身份验证错误系列）
         else:
             try:
-                self.dom = xml.parse(self.story_path)
+                self.dom = xml.parse(self.story_path)  #故事文件载入，存储在dom当中（调试模式将会不断重复重载）
             except Exception as e:
                 print('Error:', e)
                 self.isReady = False
@@ -47,6 +56,9 @@ class StoryProcess:
     async def action(self, session):
         message = session.current_arg_text
         if not self.unfold: #第一次响应时,标题开启
+
+            self.history_record("")  # 初始化历史记录
+
             content, method = self.get_interduction()
             print(content)
             print(method)
@@ -54,7 +66,17 @@ class StoryProcess:
             await self.charge_method(session, method)
             self.end_chapter() #开启章节
             self.unfold = True
+
+            self.history_record(message)  # 记录unfold状态
+
         else:  #匹配用户反应操作
+
+            if message == "上一步":
+                message = self.history_fallback()
+                if not message :
+                    await session.send("已经在第一步啦")
+
+
             content, method = self.get_response(message) #匹配response
             if content != None: #匹配成功
                 #####插入设置的发送延时#####
@@ -63,6 +85,8 @@ class StoryProcess:
                 await session.send(content) #发送content的内容
                 await self.charge_method(session, method) #执行method的内容
                 print(content)
+
+                self.history_record(message)  # 当匹配成功时进行历史记录
             else:
                 content, method = self.get_default_response()
                 #####插入设置的发送延时#####
@@ -70,6 +94,22 @@ class StoryProcess:
                     time.sleep(self.isDelay)
                 await session.send(content)
                 await self.charge_method(session, method)  # 执行method的内容
+
+
+
+        if self.debug:  #debug模式重载故事函数
+            try:
+                self.dom = xml.parse(self.story_path)  # 故事文件载入，存储在dom当中（调试模式将会不断重复重载）
+                print("重新载入成功")
+            except Exception as e:
+                print('Error:', e)
+                self.isReady = False
+                self.error_code = 202  # 故事文件载入错误，请联系管理员
+            else:
+                # 导入故事完成后从故事导入设定 #
+                self.get_setting()
+                #self.isReady = True  # 指示当前story已经准备完毕
+
 
 
 
@@ -193,13 +233,14 @@ class StoryProcess:
                     if self.isDelay > 0:
                         time.sleep(self.isDelay)
                     act = session_method_dic[name]
-                    arg = self.format_charge(arg)
+                    arg = self.format_charge(arg)  # 格式化字符串
                     await act(arg)
 
     ############################xml匹配获取函数#################################
     def get_response(self, message):
         root = self.dom.documentElement
         story_class = root.getElementsByTagName("class")[1]
+        match_list = []
 
         responses = story_class.getElementsByTagName("response")
         for response in responses:
@@ -228,11 +269,13 @@ class StoryProcess:
                         not_key = 0
                         if "not " in key:  # 解析not key 关键字
                             not_key = 1
+                            key = key.replace("not ", "").strip()
                         if not self.capitalization_sensitive:
                             key = key.lower()
                             message = message.lower()
                         if re.findall(r"[(](.*)[)]", key):
-                            key = re.findall(r"[(](.*)[)]", key)[0]
+                            key = re.findall(r"[(](.*)[)]", key)[0][1:-1]
+                            key = key.strip()
                             if key not in message and not_key == 0:
                                 iskey_block = 0
                             elif key in message and not_key == 1:
@@ -276,7 +319,12 @@ class StoryProcess:
                         else:
                             method = method_node.childNodes[0].data
 
-                        return content, method
+                        match_list.append([content, method])
+        if match_list:
+            answer = random.randint(0,len(match_list))
+            content = match_list[answer][0]
+            method = match_list[answer][1]
+            return content, method
         return None, None
 
     def get_interduction(self):
@@ -353,6 +401,7 @@ class StoryProcess:
         setting_class = root.getElementsByTagName("class")[3]  # 获取setting
         self.isDelay = float(setting_class.getElementsByTagName("isDelay")[0].childNodes[0].data)  # isDelay的setting
         self.capitalization_sensitive = float(setting_class.getElementsByTagName("capitalization_sensitive")[0].childNodes[0].data)
+        self.isBack = float(setting_class.getElementsByTagName("isBack")[0].childNodes[0].data)
 
 
 
@@ -376,5 +425,48 @@ class StoryProcess:
             return_content += k + "%"
 
         return return_content[:-1]
+
+
+    def history_record(self, message):   #history记录放在action中，判定放在history当中，若isBack打开，则本次操作将记录
+        if self.isBack:
+            pin = []
+            flag = copy.deepcopy(self.flag_list)
+            pin.append(flag)  #记录flag
+            pin.append(self.property)   #记录property
+            pin.append(self.process)    #记录process
+            pin.append(message)         #记录本次输入message
+            self.history.append(pin)    #将该关键帧放入历史列表
+            print(self.history)
+        else:
+            self.history.clear()
+
+    def history_fallback(self):
+        if self.isBack:
+            if self.history != []:
+                self.history.pop()  #将刚才那一步舍弃
+                if self.history != []:
+                    pin = self.history.pop()  #进入上一步之前的状态
+                    print(pin)
+                    message = pin.pop()  #还原触发上一步时的消息
+
+                    pin = self.history.pop()  # 还原上一步状态
+                    pin.pop()  # 去掉上上步消息
+                    print(pin)
+                    self.process = pin.pop()
+                    self.property = pin.pop()
+                    self.flag_list = pin.pop()
+                    print(self.process)
+                    print(message)
+                else:
+                    message = False
+                    print("已经是第一步啦！")
+            else:
+                message = False
+                print("无历史记录")
+
+
+        else:
+            message = '上一步'
+        return message
 
 
